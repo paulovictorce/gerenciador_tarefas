@@ -16,10 +16,22 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-
   final _todDoController = TextEditingController();
 
   List _todoList = [];
+  Map<String, dynamic> _lastRemoved;
+  int _lastRemovedPosition;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _readData().then((data) {
+      setState(() {
+        _todoList = json.decode(data);
+      });
+    });
+  }
 
   void _addToDo() {
     setState(() {
@@ -28,6 +40,8 @@ class _HomeState extends State<Home> {
       _todDoController.text = "";
       newToDo["ok"] = false;
       _todoList.add(newToDo);
+
+      _saveData();
     });
   }
 
@@ -47,11 +61,10 @@ class _HomeState extends State<Home> {
               children: <Widget>[
                 Expanded(
                   child: TextField(
-                    controller:_todDoController,
+                    controller: _todDoController,
                     decoration: InputDecoration(
                         labelText: "Nova Tarefa",
-                        labelStyle: TextStyle(color: Colors.blueGrey)
-                    ),
+                        labelStyle: TextStyle(color: Colors.blueGrey)),
                   ),
                 ),
                 RaisedButton(
@@ -67,29 +80,72 @@ class _HomeState extends State<Home> {
             child: ListView.builder(
                 padding: EdgeInsets.only(top: 10.0),
                 itemCount: _todoList.length,
-                itemBuilder: (context, index) {
-                  return CheckboxListTile(
-                    title: Text(_todoList[index]["title"]),
-                    value: _todoList[index]["ok"],
-                    secondary: CircleAvatar(
-                      child: Icon(_todoList[index]["ok"] ? Icons.check : Icons.error),
-                    ),
-                    onChanged: (c){
-                      setState(() {
-                        _todoList[index]["ok"] = c;
-                      });
-                    },
-                  );
-                }
-            ),
+                itemBuilder: buildItem),
           )
         ],
       ),
     );
   }
 
+  Widget buildItem(context, index) {
+    return Dismissible(
+      key: Key(DateTime.now().millisecondsSinceEpoch.toString()),
+      background: Container(
+        color: Colors.red,
+        child: Align(
+          alignment: Alignment(-0.9, 0.0),
+          child: Icon(
+            Icons.delete,
+            color: Colors.white,
+          ),
+        ),
+      ),
+      direction: DismissDirection.startToEnd,
+      child: CheckboxListTile(
+        title: Text(_todoList[index]["title"]),
+        value: _todoList[index]["ok"],
+        secondary: CircleAvatar(
+          child: Icon(_todoList[index]["ok"] ? Icons.check : Icons.error),
+        ),
+        onChanged: (c) {
+          setState(() {
+            _todoList[index]["ok"] = c;
+            _saveData();
+          });
+        },
+      ),
+
+      onDismissed: (direction) {
+        setState(() {
+          _lastRemoved = Map.from(_todoList[index]);
+          _lastRemovedPosition = index;
+          _todoList.removeAt(index);
+
+          _saveData();
+
+          final snack = SnackBar(
+            content: Text("Tarefa \"${_lastRemoved["title"]}\" removida!"),
+            action: SnackBarAction(label: "Desfazer",
+                onPressed: () {
+                  setState(() {
+                    _todoList.insert(_lastRemovedPosition, _lastRemoved);
+                    _saveData();
+                  });
+                }),
+            duration: Duration(seconds: 2),
+          );
+
+          Scaffold.of(context).showSnackBar(snack);
+
+        });
+      },
+
+    );
+  }
+
   Future<File> _getFile() async {
-    final directory = await getApplicationDocumentsDirectory(); //pega o diretório onde armazenamos documentos de um app
+    final directory =
+        await getApplicationDocumentsDirectory(); //pega o diretório onde armazenamos documentos de um app
     return File("${directory.path}/data.json");
   }
 
@@ -100,13 +156,11 @@ class _HomeState extends State<Home> {
   }
 
   Future<String> _readData() async {
-    try{
+    try {
       final file = await _getFile();
       return file.readAsString();
-    } catch(e) {
+    } catch (e) {
       return null;
     }
   }
-
 }
-
